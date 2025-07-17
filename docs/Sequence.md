@@ -39,6 +39,7 @@ sequenceDiagram
     participant Client
     Client->>BalanceAPI: POST /balance/charge
     BalanceAPI->>BalanceService: 충전 요청
+    Note over BalanceService: 동시성 제어 필요 → SELECT FOR UPDATE 사용
     BalanceService->>BalanceRepository: SELECT 잔액 FOR UPDATE
     alt 잔액 없음
         BalanceService->>BalanceRepository: INSERT 초기 잔액 생성
@@ -63,7 +64,8 @@ sequenceDiagram
 
     Client->>CouponAPI: 쿠폰 발급 요청
     CouponAPI->>CouponService: 쿠폰 발급 요청
-    CouponService->>CouponRepository: 쿠폰 유효성 확인 (기간 & 수량)
+    Note over CouponService: 동시성 제어 필요 → 재고, 중복, 만료 여부 동시 확인
+    CouponService->>CouponRepository: 쿠폰 유효성 확인 (기간 & 수량 & 사용자 중복)
 
     alt 쿠폰 만료
         CouponService-->>CouponAPI: 쿠폰 만료 예외
@@ -90,12 +92,13 @@ sequenceDiagram
     participant Client
     Client->>OrderAPI: POST /orders {상품ID, 옵션ID, 수량, 쿠폰ID}
     OrderAPI->>OrderService: 주문 처리 요청
-    OrderService->>ProductRepository: 재고 확인
+    Note over OrderService: 동시성 제어 필요 → 재고, 쿠폰 사용, 트랜잭션 처리
+    OrderService->>ProductRepository: 재고 확인 (SELECT FOR UPDATE)
     alt 재고 부족
         OrderService-->>OrderAPI: 예외 발생
         OrderAPI-->>Client: "상품 재고가 부족합니다"
     else 재고 충분
-        OrderService->>CouponRepository: 쿠폰 유효성 확인
+        OrderService->>CouponRepository: 쿠폰 유효성 확인 (SELECT FOR UPDATE)
         alt 쿠폰 무효
             OrderService-->>OrderAPI: 예외 발생
             OrderAPI-->>Client: "쿠폰이 유효하지 않습니다"
@@ -127,13 +130,13 @@ sequenceDiagram
             Note over PaymentService: 총 금액 계산 (가격 * 수량)
         end
         PaymentService->>CouponRepository: 쿠폰 할인 적용
-        PaymentService->>BalanceService: 잔액 확인
+        PaymentService->>BalanceService: 잔액 확인 (SELECT FOR UPDATE)
         alt 잔액 부족
             BalanceService-->>PaymentService: 잔액 부족
             PaymentService-->>PaymentAPI: 결제 실패 응답
             PaymentAPI-->>Client: "잔액이 부족합니다"
         else 잔액 충분
-            par 트랜잭션 시작
+            par 트랜잭션 시작 (동시성 제어 필수)
                 BalanceService->>BalanceService: 잔액 차감 UPDATE
                 PaymentService->>ProductRepository: 재고 차감
                 PaymentService->>CouponRepository: 쿠폰 사용 처리
@@ -149,15 +152,25 @@ sequenceDiagram
 
 ---
 
-## 인기 상품 조회 API
+## 인기 상품 조회 API (배치 기반)
 ```mermaid
 sequenceDiagram
     autonumber
+    participant BatchScheduler
+    participant StatsService
+    participant OrderRepository
+    participant ProductRepository
+    participant StatsAPI
     participant Client
-    Client->>StatsAPI: GET /products/rank
-    StatsAPI->>StatsService: 상위 5개 인기 상품 조회 요청
+
+    BatchScheduler->>StatsService: 매일 정해진 시간에 통계 수집 트리거
     StatsService->>OrderRepository: 최근 3일 주문 내역 조회
     StatsService->>ProductRepository: 상품 정보 조인
+    StatsService-->>StatsService: 상위 5개 상품 캐싱 처리
+    Note over StatsService: 배치 시점에 인기 상품 통계 계산 후 캐싱
+
+    Client->>StatsAPI: GET /products/rank
+    StatsAPI->>StatsService: 캐시된 인기 상품 조회
     StatsService-->>StatsAPI: 상위 5개 상품 리스트
     StatsAPI-->>Client: 인기 상품 응답
 ```
