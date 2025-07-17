@@ -1,13 +1,15 @@
+
+```mermaid
 erDiagram
-USER ||--o{ ORDER : has
-USER ||--o{ POINT_HISTORY : owns
-USER ||--o{ USER_COUPON : receives
+    USER ||--o{ ORDER : has
+    USER ||--o{ POINT_HISTORY : owns
+    USER ||--o{ USER_COUPON : receives
 
     USER {
         BIGINT id PK
         VARCHAR name
         VARCHAR email
-        INT point_balance
+        INT point
         DATETIME created_at
     }
 
@@ -55,8 +57,8 @@ USER ||--o{ USER_COUPON : receives
         BIGINT id PK
         BIGINT product_id FK
         VARCHAR option_name
-        INT extra_price
-        INT stock_quantity
+        INT price
+        INT quantity
         BOOLEAN is_active
     }
 
@@ -65,7 +67,7 @@ USER ||--o{ USER_COUPON : receives
     COUPON {
         BIGINT id PK
         VARCHAR name
-        INT discount_amount
+        INT discount_rate
         INT quantity
         DATE expired_at
     }
@@ -83,11 +85,18 @@ USER ||--o{ USER_COUPON : receives
         BIGINT order_id FK
         INT amount
         DATETIME paid_at
-        VARCHAR payment_method
     }
 
-    STATISTICS {
-        BIGINT product_id PK FK
-        INT sold_quantity
-        DATE calculated_date
-    }
+```
+
+### 관계 표현
+| 관계 표현   | 관계 형태    | 설명 (관계의 의미)                 |
+|-------------|--------------|----------------------------------|
+| has         | 1:N 또는 1:1 | ~을 가진다 (소유 또는 포함 의미)   |
+| owns        | 1:N          | ~을 소유한다 (소유권 또는 관리 의미)|
+| receives    | 1:N          | ~을 받는다 (수신, 지급받음 의미)   |
+| includes    | 1:N          | ~을 포함한다 (포함 관계)           |
+| uses        | 0..1:1       | ~을 사용한다 (선택적 사용)         |
+| issued_to   | 1:N          | ~에게 발급된다 (발급 대상 관계)     |
+
+### 인기 상품 데이터는 redis에 저장하여 관리한다.

@@ -35,6 +35,12 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-web")
 
+	// restdocs
+	testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
+	testImplementation("io.rest-assured:spring-mock-mvc")
+	testImplementation("com.epages:restdocs-api-spec-mockmvc:0.19.2")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.4")
+
     // DB
 	runtimeOnly("com.mysql:mysql-connector-j")
 

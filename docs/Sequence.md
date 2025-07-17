@@ -3,7 +3,7 @@
 sequenceDiagram
     autonumber
     participant Client
-    Client->>ProductAPI: GET /products
+    Client->>ProductAPI: 상품 조회 요청
     ProductAPI->>ProductService: 상품 + 옵션 목록 조회
     ProductService->>ProductRepository: 상품, 옵션, 재고 조회
     ProductRepository-->>ProductService: 상품 목록 반환
@@ -18,7 +18,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client
-    Client->>BalanceAPI: GET /balance?userId=1
+    Client->>BalanceAPI: 잔액 조회 요청
     BalanceAPI->>BalanceService: 사용자 잔액 조회
     BalanceService->>BalanceRepository: SELECT 잔액
     alt 잔액 데이터 없음
@@ -37,18 +37,23 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client
-    Client->>BalanceAPI: POST /balance/charge
-    BalanceAPI->>BalanceService: 충전 요청
-    Note over BalanceService: 동시성 제어 필요 → SELECT FOR UPDATE 사용
-    BalanceService->>BalanceRepository: SELECT 잔액 FOR UPDATE
-    alt 잔액 없음
-        BalanceService->>BalanceRepository: INSERT 초기 잔액 생성
-    else 잔액 존재
-        BalanceService->>BalanceRepository: UPDATE 기존 잔액 + 충전
+    Client->>BalanceAPI: 잔액 충전 요청
+    BalanceAPI->>BalanceService: 충전 처리 요청
+    alt 충전 금액이 0 이하
+        BalanceService-->>BalanceAPI: InvalidChargeAmountException 발생
+        BalanceAPI-->>Client: 0 이하의 금액은 충전 불가합니다.
+    else 정상 충전 요청
+        Note over BalanceService: 동시성 제어 필요 → SELECT FOR UPDATE 사용
+        BalanceService->>BalanceRepository: SELECT 잔액 FOR UPDATE
+        alt 잔액 없음
+            BalanceService->>BalanceRepository: INSERT 초기 잔액 생성
+        else 잔액 존재
+            BalanceService->>BalanceRepository: UPDATE 기존 잔액 + 충전
+        end
+        BalanceService->>BalanceRepository: INSERT 충전 이력 기록
+        BalanceService-->>BalanceAPI: 충전 완료
+        BalanceAPI-->>Client: 충전 성공 응답
     end
-    BalanceService->>BalanceRepository: INSERT 충전 이력 기록
-    BalanceService-->>BalanceAPI: 충전 완료
-    BalanceAPI-->>Client: 충전 성공 응답
 ```
 
 ---
@@ -90,7 +95,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client
-    Client->>OrderAPI: POST /orders {상품ID, 옵션ID, 수량, 쿠폰ID}
+    Client->>OrderAPI: 주문 요청
     OrderAPI->>OrderService: 주문 처리 요청
     Note over OrderService: 동시성 제어 필요 → 재고, 쿠폰 사용, 트랜잭션 처리
     OrderService->>ProductRepository: 재고 확인 (SELECT FOR UPDATE)
@@ -119,8 +124,8 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client
-    Client->>PaymentAPI: POST /payments {orderId}
-    PaymentAPI->>PaymentService: 결제 요청
+    Client->>PaymentAPI: 결제 요청
+    PaymentAPI->>PaymentService: 결제 처리 요청
     PaymentService->>OrderRepository: 주문 정보 조회
     alt 주문 없음
         PaymentService-->>PaymentAPI: 예외 발생
@@ -157,20 +162,20 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant BatchScheduler
-    participant StatsService
+    participant ProductService
     participant OrderRepository
     participant ProductRepository
-    participant StatsAPI
+    participant ProductAPI
     participant Client
 
-    BatchScheduler->>StatsService: 매일 정해진 시간에 통계 수집 트리거
-    StatsService->>OrderRepository: 최근 3일 주문 내역 조회
-    StatsService->>ProductRepository: 상품 정보 조인
-    StatsService-->>StatsService: 상위 5개 상품 캐싱 처리
-    Note over StatsService: 배치 시점에 인기 상품 통계 계산 후 캐싱
+    BatchScheduler->>ProductService: 배치 시간마다 인기 상품 항목 요청
+    ProductService->>OrderRepository: 최근 3일 주문 내역 조회
+    ProductService->>ProductRepository: 상품 정보 조인
+    ProductService-->>ProductService: 상위 5개 상품 캐싱 처리
+    Note over ProductService: 배치 시점에 인기 상품 통계 계산 후 캐싱
 
-    Client->>StatsAPI: GET /products/rank
-    StatsAPI->>StatsService: 캐시된 인기 상품 조회
-    StatsService-->>StatsAPI: 상위 5개 상품 리스트
-    StatsAPI-->>Client: 인기 상품 응답
+    Client->>ProductAPI: GET /products/rank
+    ProductAPI->>ProductService: 캐시된 인기 상품 조회
+    ProductService-->>ProductAPI: 상위 5개 상품 리스트
+    ProductAPI-->>Client: 인기 상품 응답
 ```
