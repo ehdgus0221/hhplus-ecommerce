@@ -63,7 +63,7 @@ sequenceDiagram
 
     Client->>CouponAPI: 쿠폰 발급 요청
     CouponAPI->>CouponService: 쿠폰 발급 요청
-    CouponService->>CouponRepository: 쿠폰 유효성 확인
+    CouponService->>CouponRepository: 쿠폰 유효성 확인 (기간 & 수량)
 
     alt 쿠폰 만료
         CouponService-->>CouponAPI: 쿠폰 만료 예외
@@ -126,15 +126,21 @@ sequenceDiagram
         loop 주문 금액 계산
             Note over PaymentService: 총 금액 계산 (가격 * 수량)
         end
+        PaymentService->>CouponRepository: 쿠폰 할인 적용
         PaymentService->>BalanceService: 잔액 확인
         alt 잔액 부족
             BalanceService-->>PaymentService: 잔액 부족
             PaymentService-->>PaymentAPI: 결제 실패 응답
             PaymentAPI-->>Client: "잔액이 부족합니다"
         else 잔액 충분
-            BalanceService->>BalanceService: 잔액 차감 UPDATE
-            PaymentService->>PaymentRepository: 결제 정보 저장
-            PaymentService->>ExternalDataPlatform: 주문 정보 전송
+            par 트랜잭션 시작
+                BalanceService->>BalanceService: 잔액 차감 UPDATE
+                PaymentService->>ProductRepository: 재고 차감
+                PaymentService->>CouponRepository: 쿠폰 사용 처리
+                PaymentService->>PaymentRepository: 결제 정보 저장
+            and 외부 전송 (실패 시 재시도 또는 로깅)
+                PaymentService->>ExternalDataPlatform: 주문 정보 전송
+            end
             PaymentService-->>PaymentAPI: 결제 성공
             PaymentAPI-->>Client: 결제 성공 응답
         end
